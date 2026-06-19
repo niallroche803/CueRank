@@ -3,7 +3,8 @@ import supabase from "@/api/supabaseClient";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Trophy, Plus, X, ChevronRight, Crown, Trash2, History, Lock, Unlock } from "lucide-react";
+import { Trophy, Plus, X, ChevronRight, Crown, Trash2, History, Lock, Unlock, Home } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/components/ui/use-toast";
 import TournamentBracket from "@/components/tournament/TournamentBracket";
@@ -39,6 +40,7 @@ function autoResolveByes(round) {
 
 export default function Tournament() {
   const { toast } = useToast();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [tournamentName, setTournamentName] = useState("");
   const [playerNames, setPlayerNames] = useState([""]);
@@ -179,6 +181,7 @@ export default function Tournament() {
         <div className="border-b border-border bg-card/50 sticky top-0 z-10">
           <div className="max-w-4xl mx-auto px-4 py-4 flex items-center gap-3">
             <Button variant="ghost" size="sm" onClick={() => setView("list")}>← Back</Button>
+            <Button variant="ghost" size="sm" onClick={() => navigate("/")}><Home className="w-4 h-4" /></Button>
             <h2 className="font-display font-bold text-lg flex-1">{activeTournament.name}</h2>
             {activeTournament.status === "completed" && (
               <span className="flex items-center gap-1 text-yellow-500 font-semibold text-sm">
@@ -208,6 +211,7 @@ export default function Tournament() {
         <div className="border-b border-border bg-card/50 sticky top-0 z-10">
           <div className="max-w-2xl mx-auto px-4 py-4 flex items-center gap-3">
             <Button variant="ghost" size="sm" onClick={() => setView("list")}>← Back</Button>
+            <Button variant="ghost" size="sm" onClick={() => navigate("/")}><Home className="w-4 h-4" /></Button>
             <h2 className="font-display font-bold text-lg flex-1">New Tournament</h2>
             <AdminLockButton />
           </div>
@@ -277,7 +281,10 @@ export default function Tournament() {
     <div className="min-h-screen bg-background">
       <div className="border-b border-border bg-card/50 sticky top-0 z-10">
         <div className="max-w-2xl mx-auto px-4 py-4 flex items-center justify-between">
-          <h2 className="font-display font-bold text-lg">Tournaments</h2>
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="sm" onClick={() => navigate("/")}><Home className="w-4 h-4" /></Button>
+            <h2 className="font-display font-bold text-lg">Tournaments</h2>
+          </div>
           <div className="flex items-center gap-2">
             <AdminLockButton />
             {isAdmin && (
