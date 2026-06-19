@@ -43,7 +43,10 @@ export default function Tournament() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [tournamentName, setTournamentName] = useState("");
+  const [tournamentType, setTournamentType] = useState("1v1");
+  const [teamSetupMode, setTeamSetupMode] = useState("auto");
   const [playerNames, setPlayerNames] = useState([""]);
+  const [teams, setTeams] = useState([{ name: "", players: ["", ""] }]);
   const [view, setView] = useState("list");
   const [listTab, setListTab] = useState("active");
   const [activeTournamentId, setActiveTournamentId] = useState(null);
@@ -64,6 +67,17 @@ export default function Tournament() {
     }
   };
 
+  const openCreate = () => {
+    setTournamentName("");
+    setTournamentType("1v1");
+    setTeamSetupMode("auto");
+    setPlayerNames([""]);
+    setTeams([{ name: "", players: ["", ""] }]);
+    setView("create");
+  };
+
+  const getEntryName = (e) => (typeof e === "string" ? e : e?.name ?? null);
+
   const { data: tournaments = [], isLoading } = useQuery({
     queryKey: ["tournaments"],
     queryFn: async () => {
@@ -78,8 +92,8 @@ export default function Tournament() {
   });
 
   const createMutation = useMutation({
-    mutationFn: async ({ name, names }) => {
-      let firstRound = buildFirstRound(names);
+    mutationFn: async ({ name, entries }) => {
+      let firstRound = buildFirstRound(entries);
       firstRound = autoResolveByes(firstRound);
       const { data, error } = await supabase
         .from("tournaments")
@@ -120,10 +134,32 @@ export default function Tournament() {
   });
 
   const handleCreate = () => {
-    const valid = playerNames.map((n) => n.trim()).filter(Boolean);
-    if (valid.length < 2) return toast({ title: "Add at least 2 players", variant: "destructive" });
-    if (!tournamentName.trim()) return toast({ title: "Enter a tournament name", variant: "destructive" });
-    createMutation.mutate({ name: tournamentName.trim(), names: valid });
+    const name = tournamentName.trim();
+    if (!name) return toast({ title: "Enter a tournament name", variant: "destructive" });
+
+    if (tournamentType === "1v1") {
+      const valid = playerNames.map((n) => n.trim()).filter(Boolean);
+      if (valid.length < 2) return toast({ title: "Add at least 2 players", variant: "destructive" });
+      createMutation.mutate({ name, entries: valid });
+    } else if (teamSetupMode === "auto") {
+      const valid = playerNames.map((n) => n.trim()).filter(Boolean);
+      if (valid.length < 4) return toast({ title: "Add at least 4 players for 2v2", variant: "destructive" });
+      if (valid.length % 2 !== 0) return toast({ title: "Add an even number of players", variant: "destructive" });
+      const shuffled = shuffle([...valid]);
+      const teamEntries = [];
+      for (let i = 0; i < shuffled.length; i += 2) {
+        teamEntries.push({ name: `${shuffled[i]} & ${shuffled[i + 1]}`, players: [shuffled[i], shuffled[i + 1]] });
+      }
+      createMutation.mutate({ name, entries: teamEntries });
+    } else {
+      const validTeams = teams.filter((t) => t.players[0].trim() && t.players[1].trim());
+      if (validTeams.length < 2) return toast({ title: "Add at least 2 complete teams", variant: "destructive" });
+      const namedTeams = validTeams.map((t, i) => ({
+        name: t.name.trim() || `Team ${i + 1}`,
+        players: [t.players[0].trim(), t.players[1].trim()],
+      }));
+      createMutation.mutate({ name, entries: namedTeams });
+    }
   };
 
   const handleSetWinner = (tournament, roundIdx, matchIdx, winner) => {
@@ -142,8 +178,9 @@ export default function Tournament() {
     if (allDone) {
       const winners = resolvedRound.map((m) => m.winner);
       if (winners.length === 1) {
-        updateMutation.mutate({ id: tournament.id, rounds, status: "completed", winner_name: winners[0] });
-        toast({ title: `🏆 ${winners[0]} wins the tournament!` });
+        const winner_name = getEntryName(winners[0]);
+        updateMutation.mutate({ id: tournament.id, rounds, status: "completed", winner_name });
+        toast({ title: `🏆 ${winner_name} wins the tournament!` });
         return;
       }
       const nextMatches = [];
@@ -153,8 +190,9 @@ export default function Tournament() {
       const resolvedNext = autoResolveByes(nextMatches);
       rounds.push(resolvedNext);
       if (resolvedNext.length === 1 && resolvedNext[0].winner) {
-        updateMutation.mutate({ id: tournament.id, rounds, status: "completed", winner_name: resolvedNext[0].winner });
-        toast({ title: `🏆 ${resolvedNext[0].winner} wins the tournament!` });
+        const winner_name = getEntryName(resolvedNext[0].winner);
+        updateMutation.mutate({ id: tournament.id, rounds, status: "completed", winner_name });
+        toast({ title: `🏆 ${winner_name} wins the tournament!` });
         return;
       }
     }
@@ -206,6 +244,17 @@ export default function Tournament() {
   }
 
   if (view === "create") {
+    const is2v2 = tournamentType === "2v2";
+    const showTeamInputs = is2v2 && teamSetupMode === "manual";
+
+    const updateTeamPlayer = (teamIdx, playerIdx, value) => {
+      setTeams((prev) =>
+        prev.map((t, idx) =>
+          idx === teamIdx ? { ...t, players: t.players.map((p, pi) => (pi === playerIdx ? value : p)) } : t
+        )
+      );
+    };
+
     return (
       <div className="min-h-screen bg-background">
         <div className="border-b border-border bg-card/50 sticky top-0 z-10">
@@ -230,41 +279,131 @@ export default function Tournament() {
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">Players</CardTitle>
-              <p className="text-xs text-muted-foreground">Add all participants. Byes are handled automatically.</p>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              {playerNames.map((name, i) => (
-                <div key={i} className="flex gap-2">
-                  <Input
-                    placeholder={`Player ${i + 1}`}
-                    value={name}
-                    onChange={(e) => {
-                      const updated = [...playerNames];
-                      updated[i] = e.target.value;
-                      setPlayerNames(updated);
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        setPlayerNames([...playerNames, ""]);
-                      }
-                    }}
-                  />
-                  {playerNames.length > 1 && (
-                    <Button variant="ghost" size="icon" onClick={() => setPlayerNames(playerNames.filter((_, idx) => idx !== i))}>
-                      <X className="w-4 h-4" />
-                    </Button>
-                  )}
-                </div>
+          {/* Type selector */}
+          <div className="flex gap-2">
+            {["1v1", "2v2"].map((type) => (
+              <button
+                key={type}
+                onClick={() => setTournamentType(type)}
+                className={`flex-1 py-2.5 rounded-xl border text-sm font-semibold transition-colors ${
+                  tournamentType === type
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "border-border text-muted-foreground hover:text-foreground hover:border-foreground/30"
+                }`}
+              >
+                {type}
+              </button>
+            ))}
+          </div>
+
+          {/* 2v2 team setup mode */}
+          {is2v2 && (
+            <div className="flex gap-2">
+              {[["auto", "Random pairs"], ["manual", "Manual teams"]].map(([mode, label]) => (
+                <button
+                  key={mode}
+                  onClick={() => setTeamSetupMode(mode)}
+                  className={`flex-1 py-2 rounded-xl border text-sm transition-colors ${
+                    teamSetupMode === mode
+                      ? "bg-muted border-primary/40 text-foreground font-medium"
+                      : "border-border text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {label}
+                </button>
               ))}
-              <Button variant="outline" size="sm" className="w-full mt-1" onClick={() => setPlayerNames([...playerNames, ""])}>
-                <Plus className="w-4 h-4 mr-1" /> Add Player
-              </Button>
-            </CardContent>
-          </Card>
+            </div>
+          )}
+
+          {showTeamInputs ? (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Teams</CardTitle>
+                <p className="text-xs text-muted-foreground">Name each team and enter both players.</p>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {teams.map((team, i) => (
+                  <div key={i} className="space-y-2 pb-4 border-b border-border last:border-0 last:pb-0">
+                    <div className="flex gap-2 items-center">
+                      <Input
+                        placeholder={`Team ${i + 1} name (optional)`}
+                        value={team.name}
+                        onChange={(e) =>
+                          setTeams((prev) => prev.map((t, idx) => idx === i ? { ...t, name: e.target.value } : t))
+                        }
+                        className="flex-1"
+                      />
+                      {teams.length > 1 && (
+                        <Button variant="ghost" size="icon" onClick={() => setTeams(teams.filter((_, idx) => idx !== i))}>
+                          <X className="w-4 h-4" />
+                        </Button>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <Input
+                        placeholder="Player 1"
+                        value={team.players[0]}
+                        onChange={(e) => updateTeamPlayer(i, 0, e.target.value)}
+                      />
+                      <Input
+                        placeholder="Player 2"
+                        value={team.players[1]}
+                        onChange={(e) => updateTeamPlayer(i, 1, e.target.value)}
+                      />
+                    </div>
+                  </div>
+                ))}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full"
+                  onClick={() => setTeams([...teams, { name: "", players: ["", ""] }])}
+                >
+                  <Plus className="w-4 h-4 mr-1" /> Add Team
+                </Button>
+              </CardContent>
+            </Card>
+          ) : (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Players</CardTitle>
+                <p className="text-xs text-muted-foreground">
+                  {is2v2
+                    ? "Add an even number of players and they'll be randomly paired into teams."
+                    : "Add all participants. Byes are handled automatically."}
+                </p>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {playerNames.map((name, i) => (
+                  <div key={i} className="flex gap-2">
+                    <Input
+                      placeholder={`Player ${i + 1}`}
+                      value={name}
+                      onChange={(e) => {
+                        const updated = [...playerNames];
+                        updated[i] = e.target.value;
+                        setPlayerNames(updated);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          setPlayerNames([...playerNames, ""]);
+                        }
+                      }}
+                    />
+                    {playerNames.length > 1 && (
+                      <Button variant="ghost" size="icon" onClick={() => setPlayerNames(playerNames.filter((_, idx) => idx !== i))}>
+                        <X className="w-4 h-4" />
+                      </Button>
+                    )}
+                  </div>
+                ))}
+                <Button variant="outline" size="sm" className="w-full mt-1" onClick={() => setPlayerNames([...playerNames, ""])}>
+                  <Plus className="w-4 h-4 mr-1" /> Add Player
+                </Button>
+              </CardContent>
+            </Card>
+          )}
 
           <Button className="w-full" size="lg" onClick={handleCreate} disabled={createMutation.isPending}>
             <Trophy className="w-4 h-4 mr-2" />
@@ -288,7 +427,7 @@ export default function Tournament() {
           <div className="flex items-center gap-2">
             <AdminLockButton />
             {isAdmin && (
-              <Button size="sm" onClick={() => { setTournamentName(""); setPlayerNames([""]); setView("create"); }}>
+              <Button size="sm" onClick={openCreate}>
                 <Plus className="w-4 h-4 mr-1" /> New
               </Button>
             )}
@@ -322,13 +461,15 @@ export default function Tournament() {
           <TournamentHistory
             tournaments={tournaments}
             onView={(id) => { setActiveTournamentId(id); setView("bracket"); }}
+            onDelete={(id) => deleteMutation.mutate(id)}
+            isAdmin={isAdmin}
           />
         ) : activeTournaments.length === 0 ? (
           <div className="text-center py-16">
             <Trophy className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
             <p className="text-muted-foreground">No active tournaments</p>
             {isAdmin && (
-              <Button className="mt-4" onClick={() => { setTournamentName(""); setPlayerNames([""]); setView("create"); }}>
+              <Button className="mt-4" onClick={openCreate}>
                 <Plus className="w-4 h-4 mr-1" /> Create one
               </Button>
             )}

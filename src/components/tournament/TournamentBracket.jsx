@@ -1,6 +1,16 @@
 import React from "react";
 import { Crown } from "lucide-react";
 
+function getName(p) {
+  if (!p) return null;
+  return typeof p === "string" ? p : p.name;
+}
+
+function getSubPlayers(p) {
+  if (typeof p !== "object" || !p) return null;
+  return p.players?.filter(Boolean) ?? null;
+}
+
 export default function TournamentBracket({ tournament, onSetWinner, isAdmin, onDelete }) {
   const { rounds, status, winner_name } = tournament;
   if (!rounds || rounds.length === 0) return null;
@@ -17,7 +27,6 @@ export default function TournamentBracket({ tournament, onSetWinner, isAdmin, on
 
       <div className="flex gap-6 items-start min-w-max">
         {rounds.map((round, roundIdx) => {
-          const totalRounds = rounds.length + (status === "completed" ? 0 : 1);
           let label = `Round ${roundIdx + 1}`;
           if (roundIdx === rounds.length - 1 && status === "completed") label = "Final";
           else if (round.length === 1) label = "Final";
@@ -33,7 +42,6 @@ export default function TournamentBracket({ tournament, onSetWinner, isAdmin, on
                   <MatchCard
                     key={matchIdx}
                     match={match}
-                    isLocked={false}
                     canEdit={isAdmin || !tournamentComplete}
                     onWin={(winner) => onSetWinner(roundIdx, matchIdx, winner)}
                   />
@@ -56,29 +64,33 @@ export default function TournamentBracket({ tournament, onSetWinner, isAdmin, on
   );
 }
 
-function MatchCard({ match, isLocked, canEdit, onWin }) {
+function MatchCard({ match, canEdit, onWin }) {
   const { player1, player2, winner } = match;
+  const name1 = getName(player1);
+  const name2 = getName(player2);
+  const winnerName = getName(winner);
   const isBye = player1 && !player2;
-  // Allow changing winner even if already set (as long as tournament isn't completed / isLocked by status)
   const canClick = canEdit && player1 && player2 && !isBye;
 
   return (
-    <div className="w-48 bg-card border border-border rounded-xl overflow-hidden shadow-sm">
+    <div className="w-52 bg-card border border-border rounded-xl overflow-hidden shadow-sm">
       <PlayerSlot
-        name={player1}
-        isWinner={winner === player1}
-        isLoser={!!winner && winner !== player1}
+        name={name1}
+        subPlayers={getSubPlayers(player1)}
+        isWinner={!!winnerName && winnerName === name1}
+        isLoser={!!winnerName && winnerName !== name1}
         isBye={false}
         onClick={canClick ? () => onWin(player1) : null}
       />
       <div className="h-px bg-border" />
       {isBye ? (
-        <PlayerSlot name="BYE" isWinner={false} isLoser={false} isBye={true} onClick={null} />
+        <PlayerSlot name="BYE" subPlayers={null} isWinner={false} isLoser={false} isBye={true} onClick={null} />
       ) : (
         <PlayerSlot
-          name={player2}
-          isWinner={winner === player2}
-          isLoser={!!winner && winner !== player2}
+          name={name2}
+          subPlayers={getSubPlayers(player2)}
+          isWinner={!!winnerName && winnerName === name2}
+          isLoser={!!winnerName && winnerName !== name2}
           isBye={false}
           onClick={canClick ? () => onWin(player2) : null}
         />
@@ -87,7 +99,7 @@ function MatchCard({ match, isLocked, canEdit, onWin }) {
   );
 }
 
-function PlayerSlot({ name, isWinner, isLoser, isBye, onClick }) {
+function PlayerSlot({ name, subPlayers, isWinner, isLoser, isBye, onClick }) {
   return (
     <button
       onClick={onClick || undefined}
@@ -100,7 +112,14 @@ function PlayerSlot({ name, isWinner, isLoser, isBye, onClick }) {
         onClick ? "hover:bg-muted cursor-pointer" : "cursor-default",
       ].join(" ")}
     >
-      <span className="truncate">{name || "TBD"}</span>
+      <div className="min-w-0">
+        <span className="truncate block">{name || "TBD"}</span>
+        {subPlayers && subPlayers.length > 0 && (
+          <span className="text-[10px] text-muted-foreground font-normal leading-tight block truncate">
+            {subPlayers.join(" & ")}
+          </span>
+        )}
+      </div>
       {isWinner && <Crown className="w-3.5 h-3.5 text-yellow-500 shrink-0 ml-1" />}
     </button>
   );

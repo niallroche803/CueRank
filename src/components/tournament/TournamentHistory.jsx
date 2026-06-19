@@ -1,37 +1,53 @@
 import React, { useState } from "react";
-import { Crown, ChevronDown } from "lucide-react";
+import { Crown, ChevronDown, Trash2 } from "lucide-react";
 import { format } from "date-fns";
 
-export default function TournamentHistory({ tournaments, onView }) {
+function getEntityName(e) {
+  return typeof e === "string" ? e : e?.name ?? null;
+}
+
+function entityMatchesName(e, name) {
+  if (!e) return false;
+  if (typeof e === "string") return e === name;
+  return e.name === name || (e.players || []).includes(name);
+}
+
+export default function TournamentHistory({ tournaments, onView, onDelete, isAdmin }) {
   const [selectedPlayer, setSelectedPlayer] = useState("");
 
   const completed = tournaments.filter((t) => t.status === "completed");
 
-  // Gather all unique player names from completed tournaments
+  // Gather unique names: team names + individual player names from 2v2
   const allPlayers = [...new Set(
     completed.flatMap((t) =>
       (t.rounds || []).flatMap((r) =>
-        r.flatMap((m) => [m.player1, m.player2].filter(Boolean))
+        r.flatMap((m) =>
+          [m.player1, m.player2].filter(Boolean).flatMap((e) =>
+            typeof e === "string" ? [e] : [e.name, ...(e.players || []).filter(Boolean)]
+          )
+        )
       )
     )
   )].sort();
 
-  // Get all matches for a player across all completed tournaments
-  function getPlayerResults(playerName) {
+  function getPlayerResults(name) {
     const results = [];
     for (const t of completed) {
       const rounds = t.rounds || [];
       for (let ri = 0; ri < rounds.length; ri++) {
         for (const m of rounds[ri]) {
           if (!m.winner) continue;
-          if (m.player1 === playerName || m.player2 === playerName) {
-            const won = m.winner === playerName;
-            const opponent = m.player1 === playerName ? m.player2 : m.player1;
-            let roundLabel = `Round ${ri + 1}`;
-            if (rounds.length > 1 && ri === rounds.length - 1) roundLabel = "Final";
-            else if (rounds[ri].length === 2) roundLabel = "Semi-Final";
-            results.push({ tournament: t.name, date: t.created_at, round: roundLabel, opponent, won, isBye: !opponent });
-          }
+          const isP1 = entityMatchesName(m.player1, name);
+          const isP2 = entityMatchesName(m.player2, name);
+          if (!isP1 && !isP2) continue;
+          const winnerName = getEntityName(m.winner);
+          const myEntityName = getEntityName(isP1 ? m.player1 : m.player2);
+          const won = winnerName === myEntityName;
+          const opponent = getEntityName(isP1 ? m.player2 : m.player1);
+          let roundLabel = `Round ${ri + 1}`;
+          if (rounds.length > 1 && ri === rounds.length - 1) roundLabel = "Final";
+          else if (rounds[ri].length === 2) roundLabel = "Semi-Final";
+          results.push({ tournament: t.name, date: t.created_at, round: roundLabel, opponent, won, isBye: !opponent });
         }
       }
     }
@@ -41,7 +57,13 @@ export default function TournamentHistory({ tournaments, onView }) {
   const playerResults = selectedPlayer ? getPlayerResults(selectedPlayer) : [];
   const wins = playerResults.filter((r) => r.won && !r.isBye).length;
   const losses = playerResults.filter((r) => !r.won).length;
-  const tourneysWon = completed.filter((t) => t.winner_name === selectedPlayer).length;
+  const tourneysWon = completed.filter((t) => {
+    if (t.winner_name === selectedPlayer) return true;
+    const lastRound = t.rounds?.[t.rounds.length - 1] ?? [];
+    const finalMatch = lastRound.find((m) => m.winner);
+    if (!finalMatch) return false;
+    return entityMatchesName(finalMatch.winner, selectedPlayer);
+  }).length;
 
   return (
     <div className="space-y-6">
@@ -53,23 +75,32 @@ export default function TournamentHistory({ tournaments, onView }) {
         ) : (
           <div className="space-y-2">
             {completed.map((t) => (
-              <button
-                key={t.id}
-                onClick={() => onView(t.id)}
-                className="w-full flex items-center gap-4 p-4 bg-card border border-border rounded-xl text-left hover:border-yellow-400/50 transition-colors"
-              >
-                <div className="w-9 h-9 rounded-full bg-yellow-500/15 flex items-center justify-center shrink-0">
-                  <Crown className="w-4 h-4 text-yellow-500" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="font-semibold truncate">{t.name}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    Winner: <span className="text-yellow-600 font-medium">{t.winner_name}</span>
-                    {t.created_at && ` · ${format(new Date(t.created_at), "MMM d, yyyy")}`}
-                  </p>
-                </div>
-                <span className="text-xs text-muted-foreground shrink-0">{(t.rounds || []).length} rounds</span>
-              </button>
+              <div key={t.id} className="flex items-center gap-2">
+                <button
+                  onClick={() => onView(t.id)}
+                  className="flex-1 flex items-center gap-4 p-4 bg-card border border-border rounded-xl text-left hover:border-yellow-400/50 transition-colors"
+                >
+                  <div className="w-9 h-9 rounded-full bg-yellow-500/15 flex items-center justify-center shrink-0">
+                    <Crown className="w-4 h-4 text-yellow-500" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold truncate">{t.name}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Winner: <span className="text-yellow-600 font-medium">{t.winner_name}</span>
+                      {t.created_at && ` · ${format(new Date(t.created_at), "MMM d, yyyy")}`}
+                    </p>
+                  </div>
+                  <span className="text-xs text-muted-foreground shrink-0">{(t.rounds || []).length} rounds</span>
+                </button>
+                {isAdmin && (
+                  <button
+                    onClick={() => onDelete(t.id)}
+                    className="w-9 h-9 flex items-center justify-center rounded-xl text-muted-foreground hover:text-destructive transition-colors shrink-0"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
             ))}
           </div>
         )}
