@@ -23,6 +23,7 @@ export default function Home() {
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState("rankings");
   const [currentPlayer, setCurrentPlayer] = useState(null);
+  const [selectedProfileId, setSelectedProfileId] = useState("");
   const [darkMode, setDarkMode] = useState(() => document.documentElement.classList.contains("dark"));
   const [isAdmin, setIsAdmin] = useState(() => isAdminSessionValid());
 
@@ -72,6 +73,15 @@ export default function Home() {
     queryKey: ["daily-snapshots"],
     queryFn: async () => {
       const { data, error } = await supabase.from("daily_snapshots").select("*").order("date", { ascending: false }).limit(90);
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const { data: tournaments = [] } = useQuery({
+    queryKey: ["tournaments"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("tournaments").select("*").eq("status", "completed");
       if (error) throw error;
       return data;
     },
@@ -287,7 +297,16 @@ export default function Home() {
                 <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
               </div>
             ) : (
-              <Leaderboard players={players} matches={matches} snapshots={snapshots} />
+              <Leaderboard
+                players={players}
+                matches={matches}
+                snapshots={snapshots}
+                tournaments={tournaments}
+                onSelectPlayer={(id) => {
+                  setSelectedProfileId(id);
+                  setActiveTab("profiles");
+                }}
+              />
             )}
           </TabsContent>
 
@@ -360,7 +379,14 @@ export default function Home() {
           </TabsContent>
 
           <TabsContent value="profiles" className="mt-4">
-            <PlayerProfiles players={players} matches={matches} snapshots={snapshots} />
+            <PlayerProfiles
+              players={players}
+              matches={matches}
+              snapshots={snapshots}
+              tournaments={tournaments}
+              selectedId={selectedProfileId}
+              onSelectId={setSelectedProfileId}
+            />
           </TabsContent>
         </Tabs>
       </div>

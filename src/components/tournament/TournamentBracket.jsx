@@ -8,7 +8,7 @@ function getName(p) {
 
 function getSubPlayers(p) {
   if (typeof p !== "object" || !p) return null;
-  return p.players?.filter(Boolean) ?? null;
+  return p.players?.filter(Boolean).map(getName) ?? null;
 }
 
 export default function TournamentBracket({ tournament, onSetWinner, isAdmin, onDelete }) {

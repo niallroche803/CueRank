@@ -1,13 +1,32 @@
 import React, { useState } from "react";
-import { ChevronDown, TrendingUp, TrendingDown } from "lucide-react";
-import { format } from "date-fns";
+import { ChevronDown, TrendingUp, TrendingDown, Crown } from "lucide-react";
+import { format, isValid } from "date-fns";
 import EloHistoryChart from "./EloHistoryChart";
 
-export default function PlayerProfiles({ players, matches, snapshots = [] }) {
-  const [selectedId, setSelectedId] = useState("");
+export default function PlayerProfiles({ players, matches, snapshots = [], tournaments = [], selectedId: selectedIdProp, onSelectId }) {
+  const [internalSelectedId, setInternalSelectedId] = useState("");
+  const selectedId = selectedIdProp !== undefined ? selectedIdProp : internalSelectedId;
+  const setSelectedId = onSelectId || setInternalSelectedId;
 
   const sorted = [...players].sort((a, b) => (b.elo || 1200) - (a.elo || 1200));
   const player = players.find((p) => p.id === selectedId);
+
+  // Prefer matching by player id (set for tournaments created after entries were
+  // tied to player records); fall back to name matching for older tournaments
+  // that only stored a winner_name string (2v2 wins are "Alice & Bob" team names).
+  const wonTournaments = player
+    ? tournaments
+        .filter((t) => {
+          if (t.winner_player_ids && t.winner_player_ids.length > 0) {
+            return t.winner_player_ids.includes(player.id);
+          }
+          return (t.winner_name || "")
+            .split(" & ")
+            .map((name) => name.trim().toLowerCase())
+            .includes((player.name || "").trim().toLowerCase());
+        })
+        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+    : [];
 
   const playerMatches = player
     ? matches
@@ -72,6 +91,30 @@ export default function PlayerProfiles({ players, matches, snapshots = [] }) {
             <StatBox label="Losses" value={derivedLosses} color="text-destructive" />
             <StatBox label="Win %" value={`${winRate}%`} color="text-foreground" />
           </div>
+
+          {/* Tournaments won */}
+          {wonTournaments.length > 0 && (
+            <div>
+              <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium mb-2">
+                Tournaments Won
+              </p>
+              <div className="space-y-2">
+                {wonTournaments.map((t) => (
+                  <div key={t.id} className="flex items-center gap-3 p-3 bg-card border border-border rounded-lg">
+                    <div className="w-7 h-7 rounded-full bg-yellow-500/15 flex items-center justify-center shrink-0">
+                      <Crown className="w-3.5 h-3.5 text-yellow-500" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{t.name}</p>
+                      <p className="text-[11px] text-muted-foreground">
+                        {isValid(new Date(t.created_at)) ? format(new Date(t.created_at), "MMM d, yyyy") : ""}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Head-to-head */}
           {h2hEntries.length > 0 && (

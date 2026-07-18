@@ -1,18 +1,26 @@
-import React, { useState } from "react";
+import React from "react";
 import { Crown } from "lucide-react";
-import { AnimatePresence } from "framer-motion";
 import PlayerRow from "./PlayerRow";
-import PlayerProfile from "./PlayerProfile";
-import RankHistory from "./RankHistory";
 
-export default function Leaderboard({ players, matches, snapshots = [] }) {
-  const [selectedPlayer, setSelectedPlayer] = useState(null);
+export default function Leaderboard({ players, matches, snapshots = [], tournaments = [], onSelectPlayer }) {
+  // Player ids linked to a tournament win. Older tournaments (created before
+  // entries were tied to player records) only have a winner_name string, so
+  // fall back to matching that name against the player list.
+  const winnerIds = new Set(tournaments.flatMap((t) => t.winner_player_ids || []));
+  const winnerNamesWithoutIds = new Set(
+    tournaments
+      .filter((t) => !t.winner_player_ids || t.winner_player_ids.length === 0)
+      .flatMap((t) => (t.winner_name ? t.winner_name.split(" & ") : []))
+      .map((name) => name.trim().toLowerCase())
+  );
 
   // Derive wins/losses from match history to avoid stale stored values
   const enrichedPlayers = players.map((p) => {
     const wins = matches.filter((m) => m.winner_id === p.id).length;
     const losses = matches.filter((m) => m.loser_id === p.id).length;
-    return { ...p, wins, losses };
+    const hasWonTournament =
+      winnerIds.has(p.id) || winnerNamesWithoutIds.has((p.name || "").trim().toLowerCase());
+    return { ...p, wins, losses, hasWonTournament };
   });
 
   const sorted = [...enrichedPlayers].sort((a, b) => (b.elo || 1200) - (a.elo || 1200));
@@ -30,30 +38,16 @@ export default function Leaderboard({ players, matches, snapshots = [] }) {
   }
 
   return (
-    <>
-      <div className="space-y-2">
-        {sorted.map((player, i) => (
-          <PlayerRow
-            key={player.id}
-            player={player}
-            rank={i + 1}
-            index={i}
-            onClick={() => setSelectedPlayer(enrichedPlayers.find((p) => p.id === player.id) || player)}
-          />
-        ))}
-      </div>
-
-
-
-      <AnimatePresence>
-        {selectedPlayer && (
-          <PlayerProfile
-            player={selectedPlayer}
-            matches={matches || []}
-            onClose={() => setSelectedPlayer(null)}
-          />
-        )}
-      </AnimatePresence>
-    </>
+    <div className="space-y-2">
+      {sorted.map((player, i) => (
+        <PlayerRow
+          key={player.id}
+          player={player}
+          rank={i + 1}
+          index={i}
+          onClick={() => onSelectPlayer?.(player.id)}
+        />
+      ))}
+    </div>
   );
 }

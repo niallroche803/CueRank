@@ -1,6 +1,6 @@
 import React from "react";
 import { motion } from "framer-motion";
-import { TrendingUp, TrendingDown, Minus } from "lucide-react";
+import { TrendingUp, TrendingDown, Minus, Crown } from "lucide-react";
 import RankBadge from "./RankBadge";
 
 export default function PlayerRow({ player, rank, index, onClick }) {
@@ -23,7 +23,12 @@ export default function PlayerRow({ player, rank, index, onClick }) {
       <RankBadge rank={rank} />
 
       <div className="flex-1 min-w-0">
-        <p className="font-heading font-semibold text-foreground truncate">{player.name}</p>
+        <p className="font-heading font-semibold text-foreground truncate flex items-center gap-1.5">
+          <span className="truncate">{player.name}</span>
+          {player.hasWonTournament && (
+            <Crown className="w-3.5 h-3.5 text-yellow-500 shrink-0" aria-label="Tournament winner" />
+          )}
+        </p>
         <div className="flex items-center gap-3 mt-0.5">
           <span className="text-xs text-muted-foreground">
             {wins}W – {losses}L
