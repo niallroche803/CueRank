@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/components/ui/use-toast";
 import TournamentBracket from "@/components/tournament/TournamentBracket";
 import TournamentHistory from "@/components/tournament/TournamentHistory";
+import { loginAdmin, logoutAdmin, isAdminSessionValid } from "@/lib/adminAuth";
 
 function shuffle(arr) {
   const a = [...arr];
@@ -50,19 +51,20 @@ export default function Tournament() {
   const [view, setView] = useState("list");
   const [listTab, setListTab] = useState("active");
   const [activeTournamentId, setActiveTournamentId] = useState(null);
-  const [isAdmin, setIsAdmin] = useState(() => localStorage.getItem("cuerank_admin") === "true");
+  const [isAdmin, setIsAdmin] = useState(() => isAdminSessionValid());
 
-  const handleAdminToggle = () => {
+  const handleAdminToggle = async () => {
     if (isAdmin) {
+      logoutAdmin();
       setIsAdmin(false);
-      localStorage.removeItem("cuerank_admin");
       return;
     }
     const code = window.prompt("Enter admin passcode:");
-    if (code === import.meta.env.VITE_ADMIN_PASSCODE) {
+    if (code === null) return;
+    const { ok } = await loginAdmin(code);
+    if (ok) {
       setIsAdmin(true);
-      localStorage.setItem("cuerank_admin", "true");
-    } else if (code !== null) {
+    } else {
       toast({ title: "Incorrect passcode", variant: "destructive" });
     }
   };

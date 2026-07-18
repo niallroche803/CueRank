@@ -16,6 +16,7 @@ import QuickMatchForm from "@/components/rankings/QuickMatchForm";
 import ChatBox from "@/components/chat/ChatBox";
 import PlayerProfiles from "@/components/rankings/PlayerProfiles";
 import RepairStats from "@/components/admin/RepairStats";
+import { loginAdmin, logoutAdmin, isAdminSessionValid } from "@/lib/adminAuth";
 
 export default function Home() {
   const { toast } = useToast();
@@ -23,7 +24,7 @@ export default function Home() {
   const [activeTab, setActiveTab] = useState("rankings");
   const [currentPlayer, setCurrentPlayer] = useState(null);
   const [darkMode, setDarkMode] = useState(() => document.documentElement.classList.contains("dark"));
-  const [isAdmin, setIsAdmin] = useState(() => localStorage.getItem("cuerank_admin") === "true");
+  const [isAdmin, setIsAdmin] = useState(() => isAdminSessionValid());
 
   useEffect(() => {
     if (darkMode) {
@@ -33,17 +34,18 @@ export default function Home() {
     }
   }, [darkMode]);
 
-  const handleAdminToggle = () => {
+  const handleAdminToggle = async () => {
     if (isAdmin) {
+      logoutAdmin();
       setIsAdmin(false);
-      localStorage.removeItem("cuerank_admin");
       return;
     }
     const code = window.prompt("Enter admin passcode:");
-    if (code === import.meta.env.VITE_ADMIN_PASSCODE) {
+    if (code === null) return;
+    const { ok } = await loginAdmin(code);
+    if (ok) {
       setIsAdmin(true);
-      localStorage.setItem("cuerank_admin", "true");
-    } else if (code !== null) {
+    } else {
       toast({ title: "Incorrect passcode", variant: "destructive" });
     }
   };
