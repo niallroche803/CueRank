@@ -40,7 +40,7 @@ export default function PlayerPicker({ players, currentPlayer, onSelect, onAddAn
                 <ChevronDown className="w-4 h-4 text-muted-foreground" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent className="w-56">
+            <DropdownMenuContent className="w-56 max-h-72 overflow-y-auto">
               {players.map((p) => (
                 <DropdownMenuItem key={p.id} onClick={() => onSelect(p)} className="cursor-pointer">
                   <span className="flex-1">{p.name}</span>
