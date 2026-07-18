@@ -29,14 +29,13 @@ An ELO-based ranking system for pool/billiards. Tracks player ratings, match his
 ```
 VITE_SUPABASE_URL=https://xxxx.supabase.co
 VITE_SUPABASE_ANON_KEY=your_anon_key
-VITE_ADMIN_PASSCODE=your_passcode
 ```
 
 4. Run the app: `npm run dev`
 
 ## Admin Features
 
-Admin mode is unlocked by clicking the lock icon in the header and entering the passcode. Admins can:
+Admin mode is unlocked by clicking the lock icon in the header and entering the passcode. The passcode is checked server-side by a Supabase Edge Function (`supabase/functions/admin-login`) rather than a client env var — deploy it with `supabase functions deploy admin-login` and set `ADMIN_PASSCODE` and `ADMIN_TOKEN_SECRET` via `supabase secrets set`. Admins can:
 
 - Delete matches (with automatic ELO revert)
 - Repair player stats (replays all matches from ELO 1200 to correct any drift)
@@ -47,4 +46,6 @@ Admin mode is unlocked by clicking the lock icon in the header and entering the 
 
 ## Deployment
 
-The app is deployed on Vercel. Set the same three environment variables in the Vercel dashboard under Project → Settings → Environment Variables.
+The app is deployed on Vercel. Set the same two environment variables (`VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`) in the Vercel dashboard under Project → Settings → Environment Variables.
+
+The `admin-login` Edge Function is deployed separately to Supabase, not Vercel — see the Admin Features section above.
