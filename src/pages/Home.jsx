@@ -17,6 +17,7 @@ import ChatBox from "@/components/chat/ChatBox";
 import PlayerProfiles from "@/components/rankings/PlayerProfiles";
 import RepairStats from "@/components/admin/RepairStats";
 import { loginAdmin, logoutAdmin, isAdminSessionValid } from "@/lib/adminAuth";
+import { fetchAllMatches } from "@/lib/fetchAllMatches";
 
 export default function Home() {
   const { toast } = useToast();
@@ -60,6 +61,9 @@ export default function Home() {
     },
   });
 
+  // Capped — powers only the "recent activity" match history list.
+  // Do NOT use this for totals, leaderboard stats, or ELO repair; it
+  // silently stops growing past 500 rows and would make those wrong.
   const { data: matches = [] } = useQuery({
     queryKey: ["matches"],
     queryFn: async () => {
@@ -67,6 +71,14 @@ export default function Home() {
       if (error) throw error;
       return data;
     },
+  });
+
+  // Uncapped — the true full match history, paged past PostgREST's 1000-row
+  // per-request ceiling. This is the only correct source for totals,
+  // per-player win/loss/win-rate, and the ELO repair replay.
+  const { data: allMatches = [] } = useQuery({
+    queryKey: ["allMatches"],
+    queryFn: fetchAllMatches,
   });
 
   const { data: snapshots = [] } = useQuery({
@@ -177,6 +189,7 @@ export default function Home() {
     onSuccess: ({ winner, loser, winnerChange, loserChange }) => {
       queryClient.invalidateQueries({ queryKey: ["players"] });
       queryClient.invalidateQueries({ queryKey: ["matches"] });
+      queryClient.invalidateQueries({ queryKey: ["allMatches"] });
       toast({
         title: `${winner.name} beat ${loser.name}`,
         description: `+${winnerChange} / ${loserChange} ELO`,
@@ -206,11 +219,12 @@ export default function Home() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["players"] });
       queryClient.invalidateQueries({ queryKey: ["matches"] });
+      queryClient.invalidateQueries({ queryKey: ["allMatches"] });
       toast({ title: "Match deleted and ELO reverted" });
     },
   });
 
-  const totalMatches = matches.length;
+  const totalMatches = allMatches.length;
   const topPlayer =
     players.length > 0
       ? [...players].sort((a, b) => (b.elo || 1200) - (a.elo || 1200))[0]
@@ -299,7 +313,7 @@ export default function Home() {
             ) : (
               <Leaderboard
                 players={players}
-                matches={matches}
+                matches={allMatches}
                 snapshots={snapshots}
                 tournaments={tournaments}
                 onSelectPlayer={(id) => {
@@ -344,10 +358,11 @@ export default function Home() {
             {isAdmin && (
               <RepairStats
                 players={players}
-                matches={matches}
+                matches={allMatches}
                 onDone={() => {
                   queryClient.invalidateQueries({ queryKey: ["players"] });
                   queryClient.invalidateQueries({ queryKey: ["matches"] });
+                  queryClient.invalidateQueries({ queryKey: ["allMatches"] });
                 }}
               />
             )}
@@ -371,6 +386,7 @@ export default function Home() {
           </TabsContent>
 
           <TabsContent value="history" className="mt-4">
+            {/* Recent-activity feed — intentionally capped, this one is fine as-is */}
             <MatchHistory
               matches={matches}
               isAdmin={isAdmin}
@@ -381,7 +397,7 @@ export default function Home() {
           <TabsContent value="profiles" className="mt-4">
             <PlayerProfiles
               players={players}
-              matches={matches}
+              matches={allMatches}
               snapshots={snapshots}
               tournaments={tournaments}
               selectedId={selectedProfileId}
