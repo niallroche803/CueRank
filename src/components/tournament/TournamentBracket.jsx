@@ -1,5 +1,5 @@
-import React from "react";
-import { Crown } from "lucide-react";
+import React, { useState } from "react";
+import { Crown, Check, Undo2 } from "lucide-react";
 
 function getName(p) {
   if (!p) return null;
@@ -11,7 +11,7 @@ function getSubPlayers(p) {
   return p.players?.filter(Boolean).map(getName) ?? null;
 }
 
-export default function TournamentBracket({ tournament, onSetWinner, isAdmin, onDelete }) {
+export default function TournamentBracket({ tournament, onSetWinner, onUndoWinner, isAdmin, onDelete }) {
   const { rounds, status, winner_name } = tournament;
   if (!rounds || rounds.length === 0) return null;
   const tournamentComplete = status === "completed";
@@ -43,7 +43,9 @@ export default function TournamentBracket({ tournament, onSetWinner, isAdmin, on
                     key={matchIdx}
                     match={match}
                     canEdit={isAdmin || !tournamentComplete}
+                    isAdmin={isAdmin}
                     onWin={(winner) => onSetWinner(roundIdx, matchIdx, winner)}
+                    onUndo={() => onUndoWinner(roundIdx, matchIdx)}
                   />
                 ))}
               </div>
@@ -64,13 +66,27 @@ export default function TournamentBracket({ tournament, onSetWinner, isAdmin, on
   );
 }
 
-function MatchCard({ match, canEdit, onWin }) {
+function MatchCard({ match, canEdit, isAdmin, onWin, onUndo }) {
   const { player1, player2, winner } = match;
   const name1 = getName(player1);
   const name2 = getName(player2);
   const winnerName = getName(winner);
   const isBye = player1 && !player2;
   const canClick = canEdit && player1 && player2 && !isBye;
+  const canUndo = isAdmin && !isBye && !!winner;
+
+  // Two-step confirmation: first tap proposes a winner, second tap on the
+  // same slot locks it in. Tapping the other slot switches the proposal.
+  const [pendingIdx, setPendingIdx] = useState(null);
+
+  const handleSlotClick = (idx, player) => {
+    if (pendingIdx === idx) {
+      onWin(player);
+      setPendingIdx(null);
+    } else {
+      setPendingIdx(idx);
+    }
+  };
 
   return (
     <div className="w-52 bg-card border border-border rounded-xl overflow-hidden shadow-sm">
@@ -79,8 +95,9 @@ function MatchCard({ match, canEdit, onWin }) {
         subPlayers={getSubPlayers(player1)}
         isWinner={!!winnerName && winnerName === name1}
         isLoser={!!winnerName && winnerName !== name1}
+        isPending={pendingIdx === 0}
         isBye={false}
-        onClick={canClick ? () => onWin(player1) : null}
+        onClick={canClick ? () => handleSlotClick(0, player1) : null}
       />
       <div className="h-px bg-border" />
       {isBye ? (
@@ -91,15 +108,35 @@ function MatchCard({ match, canEdit, onWin }) {
           subPlayers={getSubPlayers(player2)}
           isWinner={!!winnerName && winnerName === name2}
           isLoser={!!winnerName && winnerName !== name2}
+          isPending={pendingIdx === 1}
           isBye={false}
-          onClick={canClick ? () => onWin(player2) : null}
+          onClick={canClick ? () => handleSlotClick(1, player2) : null}
         />
+      )}
+      {pendingIdx !== null && (
+        <div className="flex items-center justify-between gap-2 px-3 py-1.5 bg-amber-500/10 border-t border-amber-500/20">
+          <span className="text-[10px] text-amber-600 font-medium">Tap again to confirm</span>
+          <button
+            onClick={() => setPendingIdx(null)}
+            className="text-[10px] text-muted-foreground hover:text-foreground underline"
+          >
+            Cancel
+          </button>
+        </div>
+      )}
+      {pendingIdx === null && canUndo && (
+        <button
+          onClick={onUndo}
+          className="w-full flex items-center justify-center gap-1 px-3 py-1.5 text-[10px] text-muted-foreground hover:text-destructive border-t border-border transition-colors"
+        >
+          <Undo2 className="w-3 h-3" /> Undo
+        </button>
       )}
     </div>
   );
 }
 
-function PlayerSlot({ name, subPlayers, isWinner, isLoser, isBye, onClick }) {
+function PlayerSlot({ name, subPlayers, isWinner, isLoser, isPending, isBye, onClick }) {
   return (
     <button
       onClick={onClick || undefined}
@@ -107,8 +144,9 @@ function PlayerSlot({ name, subPlayers, isWinner, isLoser, isBye, onClick }) {
       className={[
         "w-full px-3 py-2.5 text-sm font-medium text-left flex items-center justify-between transition-colors",
         isBye || !name ? "text-muted-foreground/40 cursor-default" : "",
-        isWinner ? "bg-primary/10 text-primary" : "",
-        isLoser ? "text-muted-foreground line-through" : "",
+        isPending ? "bg-amber-500/15 text-amber-700 ring-1 ring-inset ring-amber-500/40" : "",
+        !isPending && isWinner ? "bg-primary/10 text-primary" : "",
+        !isPending && isLoser ? "text-muted-foreground line-through" : "",
         onClick ? "hover:bg-muted cursor-pointer" : "cursor-default",
       ].join(" ")}
     >
@@ -120,7 +158,8 @@ function PlayerSlot({ name, subPlayers, isWinner, isLoser, isBye, onClick }) {
           </span>
         )}
       </div>
-      {isWinner && <Crown className="w-3.5 h-3.5 text-yellow-500 shrink-0 ml-1" />}
+      {isPending && <Check className="w-3.5 h-3.5 text-amber-600 shrink-0 ml-1" />}
+      {!isPending && isWinner && <Crown className="w-3.5 h-3.5 text-yellow-500 shrink-0 ml-1" />}
     </button>
   );
 }

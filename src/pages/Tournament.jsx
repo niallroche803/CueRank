@@ -147,8 +147,9 @@ export default function Tournament() {
   const updateMutation = useMutation({
     mutationFn: async ({ id, rounds, status, winner_name, winner_player_ids }) => {
       const patch = { rounds, status };
-      if (winner_name) patch.winner_name = winner_name;
-      if (winner_player_ids) patch.winner_player_ids = winner_player_ids;
+      // Explicit null (e.g. from undo) clears the stored winner; undefined leaves it untouched.
+      if (winner_name !== undefined) patch.winner_name = winner_name;
+      if (winner_player_ids !== undefined) patch.winner_player_ids = winner_player_ids;
       const { error } = await supabase.from("tournaments").update(patch).eq("id", id);
       if (error) throw error;
     },
@@ -235,6 +236,30 @@ export default function Tournament() {
     updateMutation.mutate({ id: tournament.id, rounds, status: "active" });
   };
 
+  // Admin-only: clear a confirmed match's winner. If later rounds were built
+  // from this result, they're discarded too (confirmed first, since that's destructive).
+  const handleUndoWinner = (tournament, roundIdx, matchIdx) => {
+    const hasLaterRounds = roundIdx < tournament.rounds.length - 1;
+    if (hasLaterRounds && !window.confirm("This will also clear results from later rounds. Continue?")) {
+      return;
+    }
+
+    let rounds = tournament.rounds.map((r) => r.map((m) => ({ ...m })));
+    if (hasLaterRounds) {
+      rounds = rounds.slice(0, roundIdx + 1);
+    }
+    rounds[roundIdx][matchIdx].winner = null;
+
+    const wasCompleted = tournament.status === "completed";
+    updateMutation.mutate({
+      id: tournament.id,
+      rounds,
+      status: "active",
+      ...(wasCompleted ? { winner_name: null, winner_player_ids: null } : {}),
+    });
+    toast({ title: "Winner undone" });
+  };
+
   const activeTournament = activeTournamentId
     ? tournaments.find((t) => t.id === activeTournamentId)
     : null;
@@ -270,6 +295,9 @@ export default function Tournament() {
             tournament={activeTournament}
             onSetWinner={(roundIdx, matchIdx, winner) =>
               handleSetWinner(activeTournament, roundIdx, matchIdx, winner)
+            }
+            onUndoWinner={(roundIdx, matchIdx) =>
+              handleUndoWinner(activeTournament, roundIdx, matchIdx)
             }
             isAdmin={isAdmin}
             onDelete={() => deleteMutation.mutate(activeTournament.id)}
